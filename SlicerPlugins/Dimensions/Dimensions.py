@@ -25,7 +25,8 @@ def from_module_import(module_name: str, *elements: Tuple[str]) -> Tuple[Any]:
     return tuple(sys.modules[module_name].__dict__[el] for el in elements)
 
 from_module_import("vtk_convenience")
-Spine, Endplate = from_module_import("morphology", "Spine", "Endplate")
+Vector3D, *_ = from_module_import("vtk_convenience", "Vector3D")
+Spine, Endplate, Body = from_module_import("morphology", "Spine", "Endplate", "Body")
 
 #
 # Dimensions
@@ -585,6 +586,10 @@ class DimensionsLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
     """
     GeneratedAttribName = "generated"
+    GeneratedWidthDirectory = "Width"
+    GeneratedHeightDirectory = "Height"
+    GeneratedDepthDirectory = "Depth"
+    GeneratedDimensionDirectories = { GeneratedWidthDirectory, GeneratedHeightDirectory, GeneratedDepthDirectory }
 
     def __init__(self):
         """
@@ -637,22 +642,42 @@ class DimensionsLogic(ScriptedLoadableModuleLogic):
         vertebraDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, DisplayMode.Vertebra.name)
         bodyDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, DisplayMode.Body.name)
         sliceDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, DisplayMode.Slice.name)
-        regressionDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, "Regression")
+        widthDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, self.GeneratedWidthDirectory)
+        heightDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, self.GeneratedHeightDirectory)
+        depthDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, self.GeneratedDepthDirectory)
 
         for inputGeometry, vertebra in zip(geometries, self.spine):
             geometryName = inputGeometry.GetName()
 
-            upperCurvePoints = self.getPoints(vertebra.body_laterally.curves[Endplate.UPPER], main_axis=vertebra.orientation.right)
-            firstPoint = np.array(upperCurvePoints[0])
-            lastPoint = np.array(upperCurvePoints[-1])
-            distance = np.linalg.norm(lastPoint-firstPoint)
-            lastPoint = firstPoint + distance * vertebra.body_laterally.regressions[Endplate.UPPER]
-
             # TODO: make this a dictionary and return to self.process
-            self.addLine(firstPoint.tolist(), lastPoint.tolist(), parentId=regressionDirectory, nodeName=geometryName)
+            firstPoint, lastPoint = self.getLine(vertebra.body_laterally, endplate=Endplate.UPPER, main_axis=vertebra.orientation.right)
+            self.addLine(firstPoint, lastPoint, parentId=widthDirectory, nodeName=geometryName)
+            firstPoint, lastPoint = self.getLine(vertebra.body, endplate=Endplate.UPPER, main_axis=vertebra.orientation.front)
+            self.addLine(firstPoint, lastPoint, parentId=depthDirectory, nodeName=geometryName)
+
             self.add(vertebra.geometry, parentId=vertebraDirectory, name=geometryName)
             self.add(vertebra.body_laterally.endplates, parentId=bodyDirectory, name=geometryName)
             self.add(vertebra.body_laterally.curves[Endplate.UPPER], parentId=sliceDirectory, name=geometryName)
+
+    @classmethod
+    def getLine(cls, body: Body, endplate: Endplate, main_axis: np.ndarray) -> Tuple[Vector3D, Vector3D]:
+        """
+        Morph the central line across a Body's topology into a straight line.
+
+        Keyword arguments:
+        body - morphology.Body object, representing a central partition of a vertical body
+        endplate - morphology.Endplate enum type, specifying if upper or lower endplate
+                   is to be inspected.
+        main_axis - the first and last object are deduced by sorting all points from the 3D
+                    curve along "main_axis"
+        """
+        curvePoints = cls.getPoints(body.curves[endplate], main_axis=main_axis)
+        firstPoint = np.array(curvePoints[0])
+        lastPoint = np.array(curvePoints[-1])
+        distance = np.linalg.norm(lastPoint - firstPoint)
+        lastPoint = firstPoint + distance * body.regressions[endplate]
+
+        return firstPoint.tolist(), lastPoint.tolist()
 
     @staticmethod
     def getPoints(polydata, main_axis):
@@ -714,7 +739,7 @@ class DimensionsLogic(ScriptedLoadableModuleLogic):
 
     @classmethod
     def getUserMarkupsLines(cls):
-        return [l for l in slicer.mrmlScene.GetNodesByClass("vtkMRMLMarkupsLineNode") if cls.getParentName(l) != "Regression"]
+        return [l for l in slicer.mrmlScene.GetNodesByClass("vtkMRMLMarkupsLineNode") if cls.getParentName(l) not in cls.GeneratedDimensionDirectories]
 
     @staticmethod
     def rasFromMarkupsLine(markupsLine):
