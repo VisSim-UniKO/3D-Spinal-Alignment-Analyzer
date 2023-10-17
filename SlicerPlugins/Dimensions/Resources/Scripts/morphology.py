@@ -173,11 +173,28 @@ class Vertebra:
 
         self.body_laterally = Vertebra._extract_body_laterally(
             vertebra_without_appendix,
-            body=self.body,
             orientation=self.orientation,
             width=slice_thickness,
             max_angle=max_angle,
         )
+
+        random_center_point = (
+            np.array(self.body_laterally.curves[Endplate.LOWER].GetPoint(0)),
+            np.array(self.body_laterally.curves[Endplate.UPPER].GetPoint(0)),
+        )
+
+        self.center = (
+            np.array(conv.cut_plane(
+                self.body.curves[Endplate.LOWER],
+                plane_origin=random_center_point[Endplate.LOWER],
+                plane_normal=self.orientation.front,
+            ).GetPoint(0)),
+            np.array(conv.cut_plane(
+                self.body.curves[Endplate.UPPER],
+                plane_origin=random_center_point[Endplate.UPPER],
+                plane_normal=self.orientation.front,
+            ).GetPoint(0)),
+        ) 
 
     def angle(self, other: Vertebra):
         rotation_axis = conv.normalize(self.orientation.right)
@@ -261,7 +278,7 @@ class Vertebra:
 
     @staticmethod
     def _extract_body_laterally(
-        poly: vtkPolyData, body: Body, orientation: Orientation, width: float, max_angle: float
+        poly: vtkPolyData, orientation: Orientation, width: float, max_angle: float
     ) -> Body:
         center = np.array(
             conv.calc_center_of_mass(poly)

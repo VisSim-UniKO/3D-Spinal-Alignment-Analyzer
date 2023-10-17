@@ -654,10 +654,11 @@ class DimensionsLogic(ScriptedLoadableModuleLogic):
             self.addLine(firstPoint, lastPoint, parentId=widthDirectory, nodeName=geometryName)
             firstPoint, lastPoint = self.getLine(vertebra.body, endplate=Endplate.UPPER, main_axis=vertebra.orientation.front)
             self.addLine(firstPoint, lastPoint, parentId=depthDirectory, nodeName=geometryName)
+            self.addLine(vertebra.center[Endplate.LOWER], vertebra.center[Endplate.UPPER], parentId=heightDirectory, nodeName=geometryName)
 
             self.add(vertebra.geometry, parentId=vertebraDirectory, name=geometryName)
-            self.add(vertebra.body_laterally.endplates, parentId=bodyDirectory, name=geometryName)
-            self.add(vertebra.body_laterally.curves[Endplate.UPPER], parentId=sliceDirectory, name=geometryName)
+            self.add(vertebra.body.endplates, parentId=bodyDirectory, name=geometryName)
+            self.add(vertebra.body.curves[Endplate.UPPER], parentId=sliceDirectory, name=geometryName)
 
     @classmethod
     def getLine(cls, body: Body, endplate: Endplate, main_axis: np.ndarray) -> Tuple[Vector3D, Vector3D]:
