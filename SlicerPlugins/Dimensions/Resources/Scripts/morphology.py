@@ -148,7 +148,22 @@ class Body:
     curves: Tuple[vtkPolyData, vtkPolyData]
     regressions: Tuple[np.ndarray, np.ndarray]
 
+    @property
+    def minmax(self):
+        return tuple(self._minmax(e) for e in Endplate.options())
 
+    def _minmax(self, endplate: Endplate):
+        curve = self.curves[endplate]
+        curve = np.array([
+            curve.GetPoint(id_)
+            for id_ in range(curve.GetNumberOfPoints())
+        ])
+        distances = curve.dot(self.regressions[endplate])
+        return (
+            curve[distances.argmin()],
+            curve[distances.argmax()],
+        )
+        
 class Vertebra:
     def __init__(
         self,
@@ -179,11 +194,15 @@ class Vertebra:
             max_angle=max_angle,
         )
 
-        self.body_laterally = Vertebra._extract_body_laterally(
+        self.body_laterally = Vertebra._extract_body(
             vertebra_without_appendix,
             orientation=self.orientation,
             width=slice_thickness,
             max_angle=max_angle,
+            laterally=True,
+            center=np.array(
+                conv.calc_center_of_mass(vertebra_without_appendix)
+            ),
         )
 
         random_center_point = (
@@ -246,79 +265,54 @@ class Vertebra:
 
     @staticmethod
     def _extract_body(
-        body: vtkPolyData, orientation: Orientation, width: float, max_angle: float
+        body: vtkPolyData,
+        orientation: Orientation,
+        width: float,
+        max_angle: float,
+        laterally: bool=False,
+        center: np.ndarray=None,
     ) -> Body:
+        if not isinstance(center, np.ndarray):
+            center = orientation.center
+        else:
+            orientation = copy(orientation)
+            orientation.center = center
+
         center_portion = Vertebra._extract_center(
-            body, orientation=orientation, width=width
+            body, orientation=orientation, width=width, laterally=laterally
         )
         endplates = conv.eliminate_misaligned_faces(
             center_portion, direction=orientation.up, max_angle=max_angle
         )
+
+        if laterally:
+            cut_direction = orientation.front
+        else:
+            cut_direction = orientation.right
         curves = conv.cut_plane(
             endplates,
-            plane_origin=orientation.center,
-            plane_normal=orientation.right,
+            plane_origin=center,
+            plane_normal=cut_direction,
         )
         curves = (
             conv.clip_plane(
                 curves,
-                plane_origin=orientation.center,
+                plane_origin=center,
                 plane_normal=orientation.down,
             ),
             conv.clip_plane(
                 curves,
-                plane_origin=orientation.center,
+                plane_origin=center,
                 plane_normal=orientation.up,
             ),
         )
+        if laterally:
+            direction_of_interest = orientation.right
+        else:
+            direction_of_interest = orientation.front
         regressions = [conv.normalize(calc_main_component(s)) for s in curves]
         regressions = [
-            -direction if direction.dot(orientation.front) < 0 else direction
-            for direction in regressions
-        ]
-
-        return Body(
-            center_portion=center_portion,
-            endplates=endplates,
-            curves=curves,
-            regressions=regressions,
-        )
-
-    @staticmethod
-    def _extract_body_laterally(
-        poly: vtkPolyData, orientation: Orientation, width: float, max_angle: float
-    ) -> Body:
-        center = np.array(
-            conv.calc_center_of_mass(poly)
-        )
-        new_orientation = copy(orientation)
-        new_orientation.center = center
-        center_portion = Vertebra._extract_center(
-            poly, orientation=new_orientation, width=width, laterally=True
-        )
-        endplates = conv.eliminate_misaligned_faces(
-            center_portion, direction=new_orientation.up, max_angle=max_angle
-        )
-        curves = conv.cut_plane(
-            endplates,
-            plane_origin=new_orientation.center,
-            plane_normal=new_orientation.front,
-        )
-        curves = (
-            conv.clip_plane(
-                curves,
-                plane_origin=new_orientation.center,
-                plane_normal=new_orientation.down,
-            ),
-            conv.clip_plane(
-                curves,
-                plane_origin=new_orientation.center,
-                plane_normal=new_orientation.up,
-            ),
-        )
-        regressions = [conv.normalize(calc_main_component(s)) for s in curves]
-        regressions = [
-            -direction if direction.dot(new_orientation.right) < 0 else direction
+            -direction if direction.dot(direction_of_interest) < 0 else direction
             for direction in regressions
         ]
 

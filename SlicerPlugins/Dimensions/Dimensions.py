@@ -686,7 +686,6 @@ class DimensionsLogic(ScriptedLoadableModuleLogic):
         self.spine = Spine(polydatas, lateral_axis=np.array(lpsRightDirection), slice_thickness=0.25, max_angle=45.0)
 
         dissectionDirectory = mrmlHierarchy.CreateFolderItem(mrmlHierarchy.GetSceneItemID(), self.dissectionFolderName(folderName))
-        
         vertebraDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, DisplayMode.Vertebra.name)
         bodyDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, DisplayMode.Body.name)
         sliceDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, DisplayMode.Slice.name)
@@ -710,12 +709,10 @@ class DimensionsLogic(ScriptedLoadableModuleLogic):
             
             width = []
             depth = []
+            lateral_extrema = vertebra.body_laterally.minmax
+            sagittal_extrema = vertebra.body.minmax
             for endplate in Endplate.options():
-                firstPoint, lastPoint = self.getLine(
-                    vertebra.body_laterally,
-                    endplate=endplate,
-                    main_axis=vertebra.orientation.right,
-                )
+                firstPoint, lastPoint = lateral_extrema[endplate]
                 width.append(np.linalg.norm(np.subtract(firstPoint, lastPoint)))
                 self.addLine(
                     firstPoint,
@@ -723,11 +720,7 @@ class DimensionsLogic(ScriptedLoadableModuleLogic):
                     parentId=widthDirectory[endplate],
                     nodeName=geometryName + " - width",
                 )
-                firstPoint, lastPoint = self.getLine(
-                    vertebra.body,
-                    endplate=endplate,
-                    main_axis=vertebra.orientation.front,
-                )
+                firstPoint, lastPoint = sagittal_extrema[endplate]
                 depth.append(np.linalg.norm(np.subtract(firstPoint, lastPoint)))
                 self.addLine(
                     firstPoint,
@@ -744,36 +737,6 @@ class DimensionsLogic(ScriptedLoadableModuleLogic):
 
             self.dimensions.append(self.Dimension(width, depth, height))
                 
-
-    @classmethod
-    def getLine(cls, body: Body, endplate: Endplate, main_axis: np.ndarray) -> Tuple[Vector3D, Vector3D]:
-        """
-        Morph the central line across a Body's topology into a straight line.
-
-        Keyword arguments:
-        body - morphology.Body object, representing a central partition of a vertical body
-        endplate - morphology.Endplate enum type, specifying if upper or lower endplate
-                   is to be inspected.
-        main_axis - the first and last object are deduced by sorting all points from the 3D
-                    curve along "main_axis"
-        """
-        curvePoints = cls.getPoints(body.curves[endplate], main_axis=main_axis)
-        firstPoint = np.array(curvePoints[0])
-        lastPoint = np.array(curvePoints[-1])
-        distance = np.linalg.norm(lastPoint - firstPoint)
-        lastPoint = firstPoint + distance * body.regressions[endplate]
-
-        return firstPoint.tolist(), lastPoint.tolist()
-
-    @staticmethod
-    def getPoints(polydata, main_axis):
-        points = [polydata.GetPoint(id_) for id_ in range(polydata.GetNumberOfPoints())]
-
-        main_axis = np.array(main_axis)
-        projection = lambda p: np.array(p).dot(main_axis)
-
-        return sorted(points, key=projection)
-        
     def add(self, polydata, parentId, name):
         modelNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", name)
         modelNode.SetAndObservePolyData(polydata)
