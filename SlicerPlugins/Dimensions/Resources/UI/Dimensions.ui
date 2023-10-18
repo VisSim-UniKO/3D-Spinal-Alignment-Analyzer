@@ -208,39 +208,19 @@
    <item>
     <widget class="ctkCollapsibleButton" name="resultsCollapsibleButton">
      <property name="enabled">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <property name="text">
       <string>Results</string>
      </property>
      <property name="collapsed">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
      <layout class="QGridLayout" name="gridLayout">
       <property name="sizeConstraint">
        <enum>QLayout::SetDefaultConstraint</enum>
       </property>
       <item row="5" column="1">
-       <widget class="QPushButton" name="saveResultButton">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-        <property name="text">
-         <string>Save</string>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="1" colspan="2">
-       <widget class="ctkComboBox" name="resultVertebraSelector"/>
-      </item>
-      <item row="3" column="0">
-       <widget class="QLabel" name="resultVertebraSelectorLabel">
-        <property name="text">
-         <string>Upmost Vertebra:</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="1">
        <widget class="ctkPathLineEdit" name="resultPathLineEdit">
         <property name="acceptDrops">
          <bool>true</bool>
@@ -258,11 +238,47 @@
         </property>
        </widget>
       </item>
-      <item row="4" column="0">
+      <item row="6" column="1">
+       <widget class="QPushButton" name="saveResultButton">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string>Save</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
        <widget class="QLabel" name="resultPathLineEditLabel">
         <property name="text">
          <string>Angle Output File:</string>
         </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="resultVertebraSelectorLabel">
+        <property name="text">
+         <string>Upmost Vertebra:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1" colspan="2">
+       <widget class="ctkComboBox" name="resultVertebraSelector"/>
+      </item>
+      <item row="4" column="0" colspan="2">
+       <widget class="QTableWidget" name="resultTableWidget">
+        <property name="sizeAdjustPolicy">
+         <enum>QAbstractScrollArea::AdjustIgnored</enum>
+        </property>
+        <attribute name="horizontalHeaderCascadingSectionResizes">
+         <bool>false</bool>
+        </attribute>
+        <attribute name="verticalHeaderVisible">
+         <bool>false</bool>
+        </attribute>
+        <attribute name="verticalHeaderCascadingSectionResizes">
+         <bool>false</bool>
+        </attribute>
        </widget>
       </item>
      </layout>

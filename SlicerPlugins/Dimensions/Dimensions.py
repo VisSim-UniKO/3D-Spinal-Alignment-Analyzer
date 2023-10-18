@@ -1,10 +1,14 @@
+from __future__ import annotations
 import os
 
 import logging
 import numpy as np
+from copy import copy
 from enum import IntEnum, unique, auto
-from typing import Any, Tuple
-
+from typing import Any, List, Tuple
+from itertools import count
+from dataclasses import dataclass
+from qt import QTableWidgetItem
 import vtk
 
 import slicer
@@ -438,9 +442,36 @@ class DimensionsWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             # Enable display mode changes
             self.ui.displayModeComboBox.enabled = True
             self.updateDisplayMode(DisplayMode.Vertebra.value)
+            self.updateResultTable(self.logic.dimensions, names=self.logic.names)
 
             self.ui.resultsCollapsibleButton.collapsed = False
             self.ui.resultsCollapsibleButton.enabled = True
+
+    def updateResultTable(self, dimensions: List[DimensionsLogic.Dimension], names: List[str]) -> None:
+        self.ui.resultTableWidget.setRowCount(len(dimensions))
+        self.ui.resultTableWidget.setColumnCount(6)
+        self.ui.resultTableWidget.setHorizontalHeaderLabels([
+            "Vertebra", "Upper Width", "Upper Depth", "Lower Width", "Lower Depth", "Height"
+        ])
+
+        for row, name, dimension in zip(count(), names, dimensions):
+           nameItem = QTableWidgetItem(name) 
+           widthItem = tuple(
+                QTableWidgetItem(f"{dimension.width[endplate]:.3f}")
+                for endplate in Endplate.options()
+           )
+           depthItem = tuple(
+                QTableWidgetItem(f"{dimension.depth[endplate]:.3f}")
+                for endplate in Endplate.options()
+           )
+           heightItem = QTableWidgetItem(f"{dimension.height:.3f}")
+
+           self.ui.resultTableWidget.setItem(row, 0, nameItem)
+           self.ui.resultTableWidget.setItem(row, 1, widthItem[Endplate.UPPER])
+           self.ui.resultTableWidget.setItem(row, 2, depthItem[Endplate.UPPER])
+           self.ui.resultTableWidget.setItem(row, 3, widthItem[Endplate.LOWER])
+           self.ui.resultTableWidget.setItem(row, 4, depthItem[Endplate.LOWER])
+           self.ui.resultTableWidget.setItem(row, 5, heightItem)
 
     def enableSaveResultButton(self):
         self.ui.saveResultButton.enabled = True
@@ -586,16 +617,33 @@ class DimensionsLogic(ScriptedLoadableModuleLogic):
     https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
     """
     GeneratedAttribName = "generated"
-    GeneratedWidthDirectory = "Width"
+    GeneratedWidthDirectory = "LowerWidth", "UpperWidth"
+    GeneratedDepthDirectory = "LowerDepth", "UpperDepth"
     GeneratedHeightDirectory = "Height"
-    GeneratedDepthDirectory = "Depth"
-    GeneratedDimensionDirectories = { GeneratedWidthDirectory, GeneratedHeightDirectory, GeneratedDepthDirectory }
+    GeneratedDimensionDirectories = {
+        GeneratedWidthDirectory[Endplate.LOWER],
+        GeneratedWidthDirectory[Endplate.UPPER],
+        GeneratedDepthDirectory[Endplate.LOWER],
+        GeneratedDepthDirectory[Endplate.UPPER],
+        GeneratedHeightDirectory,
+    }
+
+    @dataclass
+    class Dimension:
+        width: Tuple[float, float]
+        depth: Tuple[float, float]
+        height: float
 
     def __init__(self):
         """
         Called when the logic class is instantiated. Can be used for initializing member variables.
         """
         ScriptedLoadableModuleLogic.__init__(self)
+        self.dimensions = [
+            self.Dimension((0.0, 0.0,), (0.0, 0.0,), 0.0)
+            for _ in range(len(Spine.VERTEBRAE))
+        ]
+        self.names = copy(Spine.VERTEBRAE)
 
     def setDefaultParameters(self, parameterNode):
         """
@@ -642,23 +690,60 @@ class DimensionsLogic(ScriptedLoadableModuleLogic):
         vertebraDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, DisplayMode.Vertebra.name)
         bodyDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, DisplayMode.Body.name)
         sliceDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, DisplayMode.Slice.name)
-        widthDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, self.GeneratedWidthDirectory)
         heightDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, self.GeneratedHeightDirectory)
-        depthDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, self.GeneratedDepthDirectory)
+        widthDirectory = tuple(
+            mrmlHierarchy.CreateFolderItem(dissectionDirectory, self.GeneratedWidthDirectory[endplate])
+            for endplate in Endplate.options()
+        )
+        depthDirectory = tuple(
+            mrmlHierarchy.CreateFolderItem(dissectionDirectory, self.GeneratedDepthDirectory[endplate])
+            for endplate in Endplate.options()
+        )
 
+        self.dimensions = []
+        self.names = []
         for inputGeometry, vertebra in zip(geometries, self.spine):
             geometryName = inputGeometry.GetName()
+            self.names.append(geometryName)
 
             # TODO: make this a dictionary and return to self.process
-            firstPoint, lastPoint = self.getLine(vertebra.body_laterally, endplate=Endplate.UPPER, main_axis=vertebra.orientation.right)
-            self.addLine(firstPoint, lastPoint, parentId=widthDirectory, nodeName=geometryName)
-            firstPoint, lastPoint = self.getLine(vertebra.body, endplate=Endplate.UPPER, main_axis=vertebra.orientation.front)
-            self.addLine(firstPoint, lastPoint, parentId=depthDirectory, nodeName=geometryName)
-            self.addLine(vertebra.center[Endplate.LOWER], vertebra.center[Endplate.UPPER], parentId=heightDirectory, nodeName=geometryName)
+            
+            width = []
+            depth = []
+            for endplate in Endplate.options():
+                firstPoint, lastPoint = self.getLine(
+                    vertebra.body_laterally,
+                    endplate=endplate,
+                    main_axis=vertebra.orientation.right,
+                )
+                width.append(np.linalg.norm(np.subtract(firstPoint, lastPoint)))
+                self.addLine(
+                    firstPoint,
+                    lastPoint,
+                    parentId=widthDirectory[endplate],
+                    nodeName=geometryName + " - width",
+                )
+                firstPoint, lastPoint = self.getLine(
+                    vertebra.body,
+                    endplate=endplate,
+                    main_axis=vertebra.orientation.front,
+                )
+                depth.append(np.linalg.norm(np.subtract(firstPoint, lastPoint)))
+                self.addLine(
+                    firstPoint,
+                    lastPoint,
+                    parentId=depthDirectory[endplate],
+                    nodeName=geometryName + " - depth",
+                )
 
+            self.addLine(vertebra.center[Endplate.LOWER], vertebra.center[Endplate.UPPER], parentId=heightDirectory, nodeName=geometryName + " - height")
+            height = np.linalg.norm(np.subtract(vertebra.center[Endplate.UPPER], vertebra.center[Endplate.LOWER]))
             self.add(vertebra.geometry, parentId=vertebraDirectory, name=geometryName)
             self.add(vertebra.body.endplates, parentId=bodyDirectory, name=geometryName)
             self.add(vertebra.body.curves[Endplate.UPPER], parentId=sliceDirectory, name=geometryName)
+
+            self.dimensions.append(self.Dimension(width, depth, height))
+                
 
     @classmethod
     def getLine(cls, body: Body, endplate: Endplate, main_axis: np.ndarray) -> Tuple[Vector3D, Vector3D]:

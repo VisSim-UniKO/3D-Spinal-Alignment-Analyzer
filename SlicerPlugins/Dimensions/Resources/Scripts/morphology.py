@@ -21,6 +21,10 @@ class Endplate(IntEnum):
     LOWER = 0
     UPPER = 1
 
+    @classmethod
+    def options(cls):
+        return cls.LOWER, cls.UPPER
+
 
 class Spine:
     VERTEBRAE = (
@@ -84,6 +88,10 @@ class Spine:
             for first, second in zip(self.VERTEBRAE, self.VERTEBRAE[1:])
             if hasattr(self, first) and hasattr(self, second)
         }
+
+    @property
+    def names(self) -> List[str]:
+        return [name for name in cls.VERTEBRAE if hasattr(self, name)]
 
     def __getitem__(self, index: int) -> Vertebra:
         return self.vertebrae[index]
