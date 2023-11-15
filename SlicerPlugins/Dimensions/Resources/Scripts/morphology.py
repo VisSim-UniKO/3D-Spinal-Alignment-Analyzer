@@ -150,6 +150,19 @@ class Body:
 
     @property
     def minmax(self):
+        """
+        Return tuple
+        (
+         (
+          min_coordinate_lower_endplate,
+          max_coordinate_lower_endplate,
+         ),
+         (
+          min_coordinate_upper_endplate,
+          max_coordinate_upper_endplate,
+         ),
+        )
+        """
         return tuple(self._minmax(e) for e in Endplate.options())
 
     def _minmax(self, endplate: Endplate):
@@ -205,20 +218,21 @@ class Vertebra:
             ),
         )
 
-        random_center_point = (
-            np.array(self.body_laterally.curves[Endplate.LOWER].GetPoint(0)),
-            np.array(self.body_laterally.curves[Endplate.UPPER].GetPoint(0)),
+        lower_minmax, upper_minmax = self.body.minmax
+        frontal_plane_points = (
+            (lower_minmax[0] + lower_minmax[1]) / 2.0,
+            (upper_minmax[0] + upper_minmax[1]) / 2.0,
         )
 
         self.center = (
             np.array(conv.cut_plane(
                 self.body.curves[Endplate.LOWER],
-                plane_origin=random_center_point[Endplate.LOWER],
+                plane_origin=frontal_plane_points[Endplate.LOWER],
                 plane_normal=self.orientation.front,
             ).GetPoint(0)),
             np.array(conv.cut_plane(
                 self.body.curves[Endplate.UPPER],
-                plane_origin=random_center_point[Endplate.UPPER],
+                plane_origin=frontal_plane_points[Endplate.UPPER],
                 plane_normal=self.orientation.front,
             ).GetPoint(0)),
         ) 
