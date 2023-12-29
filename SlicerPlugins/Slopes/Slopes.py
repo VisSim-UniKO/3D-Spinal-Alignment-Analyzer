@@ -2,12 +2,15 @@ import os
 
 import logging
 import numpy as np
+from copy import copy
 from enum import IntEnum, unique, auto
-from typing import Any, Tuple
+from itertools import count
+from typing import Any, List, Tuple
 
 import vtk
 
 import slicer
+from qt import QTableWidgetItem
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
@@ -437,9 +440,26 @@ class SlopesWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             # Enable display mode changes
             self.ui.displayModeComboBox.enabled = True
             self.updateDisplayMode(DisplayMode.Vertebra.value)
+            self.updateResultTable(names=self.logic.names, angles=self.logic.spine.angles)
 
             self.ui.resultsCollapsibleButton.collapsed = False
             self.ui.resultsCollapsibleButton.enabled = True
+
+    def updateResultTable(self, names: List[str], angles: List[float]) -> None:
+        self.ui.resultTableWidget.setRowCount(len(names)-1)
+        self.ui.resultTableWidget.setColumnCount(3)
+        self.ui.resultTableWidget.setHorizontalHeaderLabels([
+            "From", "To", "Angle (in °)"
+        ])
+
+        for row, from_, to, angle in zip(count(), names, names[1:], angles):
+            fromItem = QTableWidgetItem(from_)
+            toItem = QTableWidgetItem(to)
+            angleItem = QTableWidgetItem(f"{angle:.3f}")
+
+            self.ui.resultTableWidget.setItem(row, 0, fromItem)
+            self.ui.resultTableWidget.setItem(row, 1, toItem)
+            self.ui.resultTableWidget.setItem(row, 2, angleItem)
 
     def enableSaveResultButton(self):
         self.ui.saveResultButton.enabled = True
@@ -591,6 +611,7 @@ class SlopesLogic(ScriptedLoadableModuleLogic):
         Called when the logic class is instantiated. Can be used for initializing member variables.
         """
         ScriptedLoadableModuleLogic.__init__(self)
+        self.names = copy(Spine.VERTEBRAE)
 
     def setDefaultParameters(self, parameterNode):
         """
@@ -639,8 +660,10 @@ class SlopesLogic(ScriptedLoadableModuleLogic):
         sliceDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, DisplayMode.Slice.name)
         regressionDirectory = mrmlHierarchy.CreateFolderItem(dissectionDirectory, "Regression")
 
+        self.names = []
         for inputGeometry, vertebra in zip(geometries, self.spine):
             geometryName = inputGeometry.GetName()
+            self.names.append(geometryName)
 
             upperCurvePoints = self.getPoints(vertebra.body.curves[Endplate.UPPER], main_axis=vertebra.orientation.front)
             firstPoint = np.array(upperCurvePoints[0])
