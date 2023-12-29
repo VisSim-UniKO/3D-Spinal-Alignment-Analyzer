@@ -1,13 +1,14 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum
-from math import acos, degrees
+from math import acos, cos, degrees, radians
 from typing import List, Set, Tuple
 
 from numpy import (
     apply_along_axis,
     argwhere,
     array,
+    dot,
     mean,
     ndarray,
     vstack,
@@ -23,13 +24,14 @@ from vtk import (
 )
 
 from vtk_convenience import (
+    Colors,
+    IdSet,
     add,
     calc_gaussian_curvature,
     calc_mean_curvature,
     colorize,
-    Colors,
     extract_points_by_ids,
-    IdSet,
+    iter_normals,
     load_stl,
 )
 
@@ -74,7 +76,8 @@ def sign(x: float, epsilon: float) -> int:
 def find_candidates(
     vertebra: vtkPolyData,
     surface_type: SurfaceType=SurfaceType.Flat,
-    epsilon: float=0.01
+    epsilon: float=0.01,
+    restricted: bool=False,
 ) -> Tuple[Set[int], vtkPointSet]:
     """
     Return candidate points from 'vertebra'.
@@ -90,6 +93,16 @@ def find_candidates(
         surface_type=surface_type,
         epsilon=epsilon
     )
+    
+    if restricted:
+        normals = list(iter_normals(vertebra))
+        max_cos = cos(radians(45.0))
+        endplate_candidate_ids = []
+        for id_ in candidate_ids:
+            dot_product = dot(normals[id_], array([0,0,1]))
+            if dot_product > max_cos:
+                endplate_candidate_ids.append(id_)
+        candidate_ids = array(endplate_candidate_ids) 
 
     return set(candidate_ids), extract_points_by_ids(vertebra, ids=candidate_ids)
 
