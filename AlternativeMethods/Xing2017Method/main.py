@@ -25,6 +25,7 @@ from vtk_convenience import (
     find_closest_point_id,
     PickedPoint,
     PointPickerInteractorStyle,
+    load_stl,
 )
 
 # harmless globals
@@ -93,13 +94,27 @@ def point_select_callback(obj, event, point: PickedPoint):
     if len(point_select_callback.selections) == 2:
         print(xing2017(*point_select_callback.selections))
         exit()
-        point_select_callback.selections.clear()
 
-def main(*vertebra_paths: List[str]) -> None:
+def median_angle(*vertebra_paths: List[str], epsilon: float) -> None:
+    vertebrae = [load_stl(p) for p in vertebra_paths]
+    candidate_lists = [find_candidates(v, epsilon=epsilon, restricted=True)[0] for v in vertebrae]
+
+    for first_id in candidate_lists[0]:
+        for second_id in candidate_lists[1]:
+            first_point = Selection(vertebrae[0], first_id, candidate_lists[0])
+            second_point = Selection(vertebrae[1], second_id, candidate_lists[1])
+            print(xing2017(first_point, second_point))
+    exit()
+
+def angle_between(*vertebra_paths: List[str], epsilon: float) -> None:
     " Putting together all pieces. "
     renderer = vtkRenderer()
     vertebra_actors: List[vtkActor] = [
-        add(actor, renderer=renderer, point_extractor_func=find_candidates)
+        add(
+            actor,
+            renderer=renderer,
+            point_extractor_func=lambda v: find_candidates(v, epsilon=epsilon),
+        )
         for actor in vertebra_paths
     ]
 
@@ -114,6 +129,11 @@ if __name__=="__main__":
     )
     parser.add_argument("top_vertebra", metavar="PATH", type=str, help="Path to STL file.")
     parser.add_argument("bottom_vertebra", metavar="PATH", type=str, help="Path to STL file.")
+    parser.add_argument("-t", "--threshold", metavar="LIM", type=float, default=0.01, help="Control the sensitivity for POI detection (default: 0.01)")
+    parser.add_argument("--all", action="store_true", help="Do not select a specific POI pair, but calculate all pairs.")
     args = parser.parse_args()
-    main(args.top_vertebra, args.bottom_vertebra)
+    if args.all:
+        median_angle(args.top_vertebra, args.bottom_vertebra, epsilon=args.threshold)
+    else:
+        angle_between(args.top_vertebra, args.bottom_vertebra, epsilon=args.threshold)
 

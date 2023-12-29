@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass
-from typing import Callable, Tuple, Set
+from typing import Callable, Generator, Tuple, Set
 
 from numpy import array, ndarray
 from vtkmodules.numpy_interface import dataset_adapter
@@ -8,6 +8,7 @@ from vtk import (
     vtkAbstractPolyDataReader,
     vtkActor,
     vtkCurvatures,
+    vtkDataArray,
     vtkDataSet,
     vtkDataSetMapper,
     vtkExtractSelection,
@@ -20,6 +21,7 @@ from vtk import (
     vtkPointSet,
     vtkPolyData,
     vtkPolyDataMapper,
+    vtkPolyDataNormals,
     vtkRemovePolyData,
     vtkRenderer,
     vtkSTLReader,
@@ -237,6 +239,22 @@ def add(
     renderer.AddActor(actor)
 
     return actor
+
+def iter_normals(polydata: vtkPolyData) -> Generator:
+    """Return generator over all vertice's normals as tuple(n_x, n_y, n_z)."""
+    normals = _calc_normals(polydata)
+    for normal_id in range(normals.GetNumberOfTuples()):
+        yield normals.GetTuple(normal_id)
+
+def _calc_normals(polydata: vtkPolyData) -> vtkDataArray:
+    """Return normals for all vertices of a vtk geometry."""
+    normals = vtkPolyDataNormals()
+    normals.SetInputData(polydata)
+    normals.SplittingOff()
+    normals.ComputePointNormalsOn()
+    normals.ComputeCellNormalsOff()
+    normals.Update()
+    return normals.GetOutput().GetPointData().GetNormals()
 
 def _load_geometry(filename: str, reader: vtkAbstractPolyDataReader) -> vtkPolyData:
     """Load the given poly data file, and return a vtkPolyData object for it."""
